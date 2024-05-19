@@ -244,7 +244,7 @@ int main()
                 cells_nets[numbers[i][j]].insert(i - 1);
             }
         }
-        output(cells_nets);
+        //output(cells_nets);
 
         int cells = numbers[0][0];
         int nets = numbers[0][1];
