@@ -8,11 +8,16 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
+#include <unordered_set>
+
 using namespace std;
 
 const int SEED = 0;
-const int N = 2;
+const int START = 0;
+const int END = 0;
 const double cooling_rate = 0.95;
+const int MULTIPLIER = 1;
 
 static bool parse(string filepath, vector<vector<int>>& numbers)
 {
@@ -147,7 +152,7 @@ static void print(vector<vector<int>>& grid)
 //    return (xmax - xmin) + (ymax - ymin);
 //}
 
-static int calculate_hpwl(const vector<int>& xcoords, const vector<int>& ycoords, const vector<vector<int>>& numbers, int net)
+static int calculate_hpwl(vector<int>& xcoords, vector<int>& ycoords, vector<vector<int>>& numbers, int net)
 {
     int cells = numbers[net][0];
     int xmax = xcoords[numbers[net][1]];
@@ -211,17 +216,33 @@ static void print_bin(vector<vector<int>>& grid)
 
 }
 
+static void output(unordered_map<int, unordered_set<int>> cells_nets)
+{
+    for (const auto& pair : cells_nets)
+    {
+        int cell = pair.first;
+        const unordered_set<int>& nets = pair.second;
+        cout << "Cell " << cell << " is connected to nets: ";
+        for (int net : nets)
+        {
+            cout << net << " ";
+        }
+        cout << endl;
+    }
+}
+
 int main()
 {
     srand(SEED);
+    unordered_map<int, unordered_set<int>> cells_nets;
     vector<vector<int>> numbers;
-    string filepath = "F:\\Blackboard\\Courses\\CSCE330401 - Digital Design II (2024 Spring)\\Course Content\\Project\\";
+    string filepath = "";
     string filename = "d";
     string file_extension = ".txt";
-    for (int i = 1; i < N; i++)
+    for (int i = START; i <= END; i++)
     {
         filename += to_string(i);
-        filepath += filename + file_extension;
+        filepath = filename + file_extension;
         if (parse(filepath, numbers))
         {
             cout << "Netlist parsed successfully" << endl;
@@ -230,8 +251,15 @@ int main()
         {
             cout << "Error parsing netlist" << endl;
         }
-        filename = "d";
-        filepath = "F:\\Blackboard\\Courses\\CSCE330401 - Digital Design II (2024 Spring)\\Course Content\\Project\\";
+        
+        for (int i = 1; i < numbers.size(); i++)
+        {
+            for (int j = 1; j < numbers[i].size(); j++)
+            {
+                cells_nets[numbers[i][j]].insert(i-1);
+            }
+        }
+        output(cells_nets);
 
         int cells = numbers[0][0];
         int nets = numbers[0][1];
@@ -260,13 +288,15 @@ int main()
         double temp = initial_temp;
         double final_temp = 5e-6 * initial_cost / nets;
         //cout << final_temp << endl;
+        int moves = MULTIPLIER * cells;
+        int delta = 0;
         int new_cost = 0;
-        int moves = 20 * cells;
         auto start = chrono::high_resolution_clock::now();
         while (temp > final_temp)
         {
             for (int i = 0; i < moves; i++)
             {
+                delta = 0;
                 // Pick two random cells and swap them
                 int xrand1, xrand2, yrand1, yrand2;
                 do
@@ -281,36 +311,71 @@ int main()
                 // cout << grid[yrand1][xrand1] << endl;
                 if (grid[yrand1][xrand1] != -1)
                 {
+                    unordered_set<int> nets = cells_nets[grid[yrand1][xrand1]];
+                    cout << grid[yrand1][xrand1] << endl;
+                    initial_cost = 0;
+                    for (int net : nets)
+                    {
+                        initial_cost += calculate_hpwl(xcoords, ycoords, numbers, net + 1);
+                    }
+                    cout << initial_cost << endl;
                     xcoords[grid[yrand1][xrand1]] = xrand1;
                     ycoords[grid[yrand1][xrand1]] = yrand1;
+                    new_cost = 0;
+                    for (int net : nets)
+                    {
+                        new_cost += calculate_hpwl(xcoords, ycoords, numbers, net+1);
+                    }
+                    print(grid);
+                    cout << new_cost << endl;
+                    delta = new_cost - initial_cost;
+                    cout << delta << endl;
                 }
                 if (grid[yrand2][xrand2] != -1)
                 {
+                    unordered_set<int> nets = cells_nets[grid[yrand2][xrand2]];
+                    cout << grid[yrand1][xrand1] << endl;
+                    initial_cost = 0;
+                    for (int net : nets)
+                    {
+                        initial_cost += calculate_hpwl(xcoords, ycoords, numbers, net + 1);
+                    }
                     xcoords[grid[yrand2][xrand2]] = xrand2;
                     ycoords[grid[yrand2][xrand2]] = yrand2;
+                    new_cost = 0;
+                    for (int net : nets)
+                    {
+                        new_cost += calculate_hpwl(xcoords, ycoords, numbers, net + 1);
+                    }
+                    delta += (new_cost - initial_cost);
+                    cout << initial_cost << endl;
+                    cout << new_cost << endl;
+                    return 0;
                 }
                 // calculate the change in WL (ΔL) due to the swap
-                new_cost = 0;
-                for (int i = 0; i < nets; i++)
+
+                //new_cost = 0;
+                /*for (int i = 0; i < nets; i++)
                 {
                     if (count(numbers[i + 1].begin() + 1, numbers[i + 1].end(), grid[yrand1][xrand1]) != 0 || count(numbers[i + 1].begin() + 1, numbers[i + 1].end(), grid[yrand2][xrand2]) != 0)
                     {
                         hpwls[i] = calculate_hpwl(xcoords, ycoords, numbers, i + 1);
                     }
                     new_cost += hpwls[i];
-                }
+                }*/
                 //new_cost = calculate_cost(hpwls);
                 // if ΔL < 0 then accept
                 //cout << "New cost: " << new_cost << " Initial cost: " << initial_cost << " Temp: " << temp << "\n";
-                int delta = new_cost - initial_cost;
-                if (delta < 0)
-                {
-                    initial_cost = new_cost;
-                }
+                //int delta = new_cost - initial_cost;
+                //if (delta < 0)
+                //{
+                //    initial_cost = new_cost;
+                //}
                 // else reject with probability (1-e^-ΔL/T)
-                else
+                if(delta >= 0)
                 {
-                    double probability = 1 - exp((initial_cost - new_cost) / temp);
+                    //double probability = 1 - exp((initial_cost - new_cost) / temp);
+                    double probability = 1 - exp(-delta / temp);
                     //cout << "Probability: " << probability << endl;
                     double r = (double)(rand() % 1000) / 1000;
                     // cout << r << endl;
@@ -329,10 +394,10 @@ int main()
                             ycoords[grid[yrand2][xrand2]] = yrand1;
                         }
                     }
-                    else
-                    {
-                        initial_cost = new_cost;
-                    }
+                    //else
+                    //{
+                    //    initial_cost = new_cost;
+                    //}
                 }
             }
             // T = schedule_temp()
@@ -340,13 +405,20 @@ int main()
         }
         auto end = chrono::high_resolution_clock::now();
         auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-
         cout << "Time taken: " << duration.count() << " milliseconds" << endl;
+
         cout << "Final Placement\n";
         print(grid);
         print_bin(grid);
-        cout << "TWL after finishing the SA: " << initial_cost << endl;
+        for (int i = 0; i < nets; i++)
+        {
+            hpwls[i] = calculate_hpwl(xcoords, ycoords, numbers, i+1);
+        }
+        int twl = calculate_cost(hpwls);
 
+        cout << "TWL after finishing the SA: " << twl << endl;
+        
+        filename = "d";
         numbers.clear();
         grid.clear();
         xcoords.clear();

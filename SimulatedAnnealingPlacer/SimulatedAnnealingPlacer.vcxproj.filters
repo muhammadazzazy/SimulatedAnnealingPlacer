@@ -19,4 +19,10 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="d0.txt" />
+    <Text Include="d1.txt" />
+    <Text Include="d2.txt" />
+    <Text Include="d3.txt" />
+  </ItemGroup>
 </Project>
