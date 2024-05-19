@@ -8,12 +8,15 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
+#include <unordered_set>
+
 using namespace std;
 
 const int MULTIPLIER = 20;
 const int SEED = 0;
 const int START = 0;
-const int END = 2;
+const int END = 3;
 const double cooling_rate = 0.95;
 
 static bool parse(string filepath, vector<vector<int>>& numbers)
@@ -189,6 +192,31 @@ static void print_bin(vector<vector<int>>& grid)
 
 }
 
+static void output(unordered_map<int, unordered_set<int>> cells_nets)
+{
+    for (const auto& pair : cells_nets)
+    {
+        int cell = pair.first;
+        const unordered_set<int>& nets = pair.second;
+        cout << "Cell " << cell << " is connected to nets: ";
+        for (int net : nets)
+        {
+            cout << net << " ";
+        }
+        cout << endl;
+    }
+}
+
+unordered_set<int> set_union(unordered_set<int>& set1, unordered_set<int>& set2)
+{
+    unordered_set<int> resultSet = set1;
+    for (int elem : set2) {
+        resultSet.insert(elem);
+    }
+
+    return resultSet;
+}
+
 int main()
 {
     srand(SEED);
@@ -208,6 +236,15 @@ int main()
         {
             cout << "Error parsing netlist" << endl;
         }
+        unordered_map<int, unordered_set<int>> cells_nets;
+        for (int i = 1; i < numbers.size(); i++)
+        {
+            for (int j = 1; j < numbers[i].size(); j++)
+            {
+                cells_nets[numbers[i][j]].insert(i - 1);
+            }
+        }
+        output(cells_nets);
 
         int cells = numbers[0][0];
         int nets = numbers[0][1];
@@ -252,14 +289,28 @@ int main()
                     xrand2 = rand() % nx;
                     yrand2 = rand() % ny;
                 } while (((xrand1 == xrand2 && yrand1 == yrand2) || ((grid[yrand1][xrand1] == -1) && (grid[yrand2][xrand2] == -1))));
-                old_cost = 0;
+                
                 int cell1 = grid[yrand1][xrand1];
                 int cell2 = grid[yrand2][xrand2];
-                swap(grid[yrand1][xrand1], grid[yrand2][xrand2]);
-                for (int i = 0; i < nets; i++)
+                old_cost = 0;
+                unordered_set<int> nets;
+                if (cell1 != -1 && cell2 != -1)
                 {
-                    old_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
+                    nets = set_union(cells_nets[grid[yrand1][xrand1]], cells_nets[grid[yrand2][xrand2]]);
                 }
+                else if (cell1 != -1 && cell2 == -1)
+                {
+                    nets = cells_nets[grid[yrand1][xrand1]];
+                }
+                else
+                {
+                    nets = cells_nets[grid[yrand2][xrand2]];
+                }
+                for (int net : nets)
+                {
+                    old_cost += calculate_hpwl(xcoords, ycoords, numbers, net + 1);
+                }
+                swap(grid[yrand1][xrand1], grid[yrand2][xrand2]);
                 if (cell1 != -1)
                 {
                     xcoords[cell1] = xrand2;
@@ -272,9 +323,9 @@ int main()
                 }
                 // calculate the change in WL (ΔL) due to the swap
                 new_cost = 0;
-                for (int i = 0; i < nets; i++)
+                for (int net : nets)
                 {
-                    new_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
+                    new_cost += calculate_hpwl(xcoords, ycoords, numbers, net + 1);
                 }
                 //new_cost = calculate_cost(hpwls);
                 // if ΔL < 0 then accept
