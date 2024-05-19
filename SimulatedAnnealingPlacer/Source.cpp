@@ -10,12 +10,11 @@
 #include <chrono>
 using namespace std;
 
-
+const int MULTIPLIER = 20;
 const int SEED = 0;
 const int START = 0;
-const int END = 1;
+const int END = 2;
 const double cooling_rate = 0.95;
-const int MULTIPLIER = 20;
 
 static bool parse(string filepath, vector<vector<int>>& numbers)
 {
@@ -65,8 +64,9 @@ static bool parse(string filepath, vector<vector<int>>& numbers)
     return true;
 }
 
-static vector<vector<int>> initialize(vector<vector<int>>& numbers, vector<int>& xcoords, vector<int>& ycoords, int cells)
+static vector<vector<int>> initialize(vector<vector<int>>& numbers, vector<int>& xcoords, vector<int>& ycoords)
 {
+    int cells = numbers[0][0];
     int ny = numbers[0][2];
     int nx = numbers[0][3];
     int y;
@@ -169,16 +169,6 @@ static int calculate_hpwl(const vector<int>& xcoords, const vector<int>& ycoords
     return (xmax - xmin) + (ymax - ymin);
 }
 
-static int calculate_cost(vector<int>& hpwls)
-{
-    int cost = 0;
-    for (int i = 0; i < hpwls.size(); i++)
-    {
-        cost += hpwls[i];
-    }
-    return cost;
-}
-
 static void print_bin(vector<vector<int>>& grid)
 {
     for (int i = 0; i < grid.size(); i++)
@@ -206,9 +196,9 @@ int main()
     string filepath = "";
     string filename = "d";
     string file_extension = ".txt";
-    for (int i = START; i <= END; i++)
+    for (int index = START; index <= END; index++)
     {
-        filename += to_string(i);
+        filename += to_string(index);
         filepath = filename + file_extension;
         if (parse(filepath, numbers))
         {
@@ -219,7 +209,6 @@ int main()
             cout << "Error parsing netlist" << endl;
         }
 
-
         int cells = numbers[0][0];
         int nets = numbers[0][1];
         int ny = numbers[0][2];
@@ -229,27 +218,27 @@ int main()
         vector<int> ycoords(cells);
 
         // Create an initial random placement
-        vector<vector<int>> grid = initialize(numbers, xcoords, ycoords, cells);
+        vector<vector<int>> grid = initialize(numbers, xcoords, ycoords);
         cout << "Initial Random Placement\n";
         print(grid);
         print_bin(grid);
 
-        vector<int> hpwls(nets);
+        int initial_cost = 0;
         for (int i = 0; i < nets; i++)
         {
-            hpwls[i] = calculate_hpwl(xcoords, ycoords, numbers, i + 1);
+            initial_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
             //cout << hpwls[i] << endl;
         }
-        int initial_cost = calculate_cost(hpwls);
         cout << "TWL after the initial random placement: " << initial_cost << endl;
         double initial_temp = 500 * initial_cost; // Very high temp
         //cout << initial_temp << endl;
         double temp = initial_temp;
         double final_temp = 5e-6 * initial_cost / nets;
-        //cout << final_temp << endl;
         int new_cost = 0;
+        int old_cost = initial_cost;
         int moves = MULTIPLIER * cells;
         auto start = chrono::high_resolution_clock::now();
+
         while (temp > final_temp)
         {
             for (int i = 0; i < moves; i++)
@@ -263,41 +252,37 @@ int main()
                     xrand2 = rand() % nx;
                     yrand2 = rand() % ny;
                 } while (((xrand1 == xrand2 && yrand1 == yrand2) || ((grid[yrand1][xrand1] == -1) && (grid[yrand2][xrand2] == -1))));
-
+                old_cost = 0;
+                int cell1 = grid[yrand1][xrand1];
+                int cell2 = grid[yrand2][xrand2];
                 swap(grid[yrand1][xrand1], grid[yrand2][xrand2]);
-                // cout << grid[yrand1][xrand1] << endl;
-                if (grid[yrand1][xrand1] != -1)
+                for (int i = 0; i < nets; i++)
                 {
-                    xcoords[grid[yrand1][xrand1]] = xrand1;
-                    ycoords[grid[yrand1][xrand1]] = yrand1;
+                    old_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
                 }
-                if (grid[yrand2][xrand2] != -1)
+                if (cell1 != -1)
                 {
-                    xcoords[grid[yrand2][xrand2]] = xrand2;
-                    ycoords[grid[yrand2][xrand2]] = yrand2;
+                    xcoords[cell1] = xrand2;
+                    ycoords[cell1] = yrand2;
+                }
+                if (cell2 != -1)
+                {
+                    xcoords[cell2] = xrand1;
+                    ycoords[cell2] = yrand1;
                 }
                 // calculate the change in WL (ΔL) due to the swap
                 new_cost = 0;
                 for (int i = 0; i < nets; i++)
                 {
-                    if (count(numbers[i + 1].begin() + 1, numbers[i + 1].end(), grid[yrand1][xrand1]) != 0 || count(numbers[i + 1].begin() + 1, numbers[i + 1].end(), grid[yrand2][xrand2]) != 0)
-                    {
-                        hpwls[i] = calculate_hpwl(xcoords, ycoords, numbers, i + 1);
-                    }
-                    new_cost += hpwls[i];
+                    new_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
                 }
                 //new_cost = calculate_cost(hpwls);
                 // if ΔL < 0 then accept
-                //cout << "New cost: " << new_cost << " Initial cost: " << initial_cost << " Temp: " << temp << "\n";
-                int delta = new_cost - initial_cost;
-                if (delta < 0)
-                {
-                    initial_cost = new_cost;
-                }
+                int delta = new_cost - old_cost;
                 // else reject with probability (1-e^-ΔL/T)
-                else
+                if(delta >= 0)
                 {
-                    double probability = 1 - exp((initial_cost - new_cost) / temp);
+                    double probability = 1 - exp(-delta / temp);
                     //cout << "Probability: " << probability << endl;
                     double r = (double)(rand() % 1000) / 1000;
                     // cout << r << endl;
@@ -305,43 +290,41 @@ int main()
                     {
                         //cout << "Bad move rejected\n";
                         swap(grid[yrand1][xrand1], grid[yrand2][xrand2]);
-                        if (grid[yrand1][xrand1] != -1)
+                        if (cell1 != -1)
                         {
-                            xcoords[grid[yrand1][xrand1]] = xrand2;
-                            ycoords[grid[yrand1][xrand1]] = yrand2;
+                            xcoords[cell1] = xrand1;
+                            ycoords[cell1] = yrand1;
                         }
-                        if (grid[yrand2][xrand2] != -1)
+                        if (cell2 != -1)
                         {
-                            xcoords[grid[yrand2][xrand2]] = xrand1;
-                            ycoords[grid[yrand2][xrand2]] = yrand1;
+                            xcoords[cell2] = xrand2;
+                            ycoords[cell2] = yrand2;
                         }
-                    }
-                    else
-                    {
-                        initial_cost = new_cost;
                     }
                 }
             }
             // T = schedule_temp()
             temp *= cooling_rate;
         }
+
         auto end = chrono::high_resolution_clock::now();
         auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-
         cout << "Time taken: " << duration.count() << " milliseconds" << endl;
         cout << "Final Placement\n";
         print(grid);
         print_bin(grid);
-        cout << "TWL after finishing the SA: " << initial_cost << endl;
+        int final_cost = 0;
+        for (int i = 0; i < nets; i++)
+        {
+            final_cost += calculate_hpwl(xcoords, ycoords, numbers, i+1);
+        }
+        cout << "TWL after finishing the SA: " << final_cost << endl;
 
         filename = "d";
-        filepath = "";
-
         numbers.clear();
         grid.clear();
         xcoords.clear();
         ycoords.clear();
-        hpwls.clear();
     }
     return 0;
 }
