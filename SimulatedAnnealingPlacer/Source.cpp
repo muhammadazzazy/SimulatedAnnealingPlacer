@@ -28,7 +28,6 @@ static bool parse(string filepath, vector<vector<int>>& numbers)
         string line;
         while (getline(file, line))
         {
-            // cout << line << endl;
             lines.push_back(line);
             n++;
         }
@@ -45,7 +44,6 @@ static bool parse(string filepath, vector<vector<int>>& numbers)
         stringstream ss(line);
         while (ss >> token)
         {
-            // cout << token << endl;
             arr.push_back(stoi(token));
         }
         numbers.push_back(arr);
@@ -87,14 +85,12 @@ static vector<vector<int>> initialize(vector<vector<int>>& numbers, vector<int>&
         }
         if (grid[y][x] == -1)
         {
-            // cout << i << endl;
             grid[y][x] = i;
             xcoords[i] = x;
             ycoords[i] = y;
         }
         else
         {
-            // cout << i << endl;
             y = rand() % ny;
             x = rand() % nx;;
             while (grid[y][x] != -1)
@@ -205,14 +201,14 @@ static void output(unordered_map<int, unordered_set<int>> cells_nets)
     }
 }
 
-unordered_set<int> set_union(unordered_set<int>& set1, unordered_set<int>& set2)
+static unordered_set<int> set_union(unordered_set<int>& set1, unordered_set<int>& set2)
 {
-    unordered_set<int> resultSet = set1;
-    for (int elem : set2) {
-        resultSet.insert(elem);
+    unordered_set<int> result = set1;
+    for (int element : set2) {
+        result.insert(element);
     }
 
-    return resultSet;
+    return result;
 }
 
 int main()
@@ -261,26 +257,21 @@ int main()
     for (int i = 0; i < nets; i++)
     {
         initial_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
-        //cout << hpwls[i] << endl;
     }
     vector<int> twls;
-
+    vector<double> temps;
     cout << "TWL after the initial random placement: " << initial_cost << endl;
     double initial_temp = 500 * initial_cost; // Very high temp
-    //cout << initial_temp << endl;
     double temp = initial_temp;
     double final_temp = 5e-6 * initial_cost / nets;
     int old_cost = 0;
     int new_cost = 0;
     int moves = MULTIPLIER * cells;
     auto start = chrono::high_resolution_clock::now();
-
+    twls.push_back(initial_cost);
+    temps.push_back(temp);
     unordered_set<int> connections;
-    //for (int j = 0; j < nets; j++)
-    //{
-    //    old_cost += calculate_hpwl(xcoords, ycoords, numbers, j + 1);
-    //}
-
+    int cost = 0;
     while (temp > final_temp)
     {
         for (int i = 0; i < moves; i++)
@@ -331,22 +322,15 @@ int main()
             {
                 new_cost += calculate_hpwl(xcoords, ycoords, numbers, connection + 1);
             }
-            //for (int j = 0; j < nets; j++)
-            //{
-            //    new_cost += calculate_hpwl(xcoords, ycoords, numbers, j + 1);
-            //}
             // if ΔL < 0 then accept
             int delta = new_cost - old_cost;
             // else reject with probability (1-e^-ΔL/T)
             if (delta >= 0)
             {
                 double probability = 1 - exp(-delta / temp);
-                //cout << "Probability: " << probability << endl;
                 double r = (double)(rand() % 1000) / 1000;
-                // cout << r << endl;
                 if (r < probability)
                 {
-                    //cout << "Bad move rejected\n";
                     swap(grid[yrand1][xrand1], grid[yrand2][xrand2]);
                     if (cell1 != -1)
                     {
@@ -369,10 +353,17 @@ int main()
                 old_cost = new_cost;
             }
         }
+        cost = 0;
+        for (int j = 0; j < nets; j++)
+        {
+            cost += calculate_hpwl(xcoords, ycoords, numbers, j + 1);
+        }
+        twls.push_back(cost);
+        temps.push_back(temp);
         // T = schedule_temp()
         temp *= cooling_rate;
     }
-
+    
     auto end = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Time taken: " << duration.count() << " milliseconds" << endl;
@@ -385,10 +376,19 @@ int main()
         final_cost += calculate_hpwl(xcoords, ycoords, numbers, i + 1);
     }
     cout << "TWL after finishing the SA: " << final_cost << endl;
-    ofstream file(filename + "_cooling_rate_twl" + file_extension, ios_base::app);
+    //ofstream file(filename + "_cooling_rate_twl" + file_extension, ios_base::app);
+    //if (file.is_open())
+    //{
+    //    file << cooling_rate << " " << final_cost << endl;
+    //}
+    //file.close();
+    ofstream file(filename + "_temperature_twl" + file_extension);
     if (file.is_open())
     {
-        file << cooling_rate << " " << final_cost << endl;
+        for (int i = 0; i < twls.size(); i++)
+        {
+            file << twls[i] << " " << to_string(temps[i]) << endl;
+        }
     }
     file.close();
     return 0;
